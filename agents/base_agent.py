@@ -7,7 +7,6 @@ from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional
 import json
 import logging
-from openai import OpenAI
 
 from config.settings import settings
 
@@ -27,16 +26,29 @@ class BaseAgent(ABC):
     """
     
     def __init__(self):
-        """Initialize LLM client."""
-        self.client = OpenAI(
-            api_key=settings.LLM_API_KEY,
-            base_url=settings.LLM_BASE_URL
-        )
+        """Initialize LLM client based on provider."""
+        self.provider = settings.LLM_PROVIDER
         self.model = settings.LLM_MODEL
         self.temperature = settings.LLM_TEMPERATURE
         self.max_tokens = settings.LLM_MAX_TOKENS
         
-        logger.info(f"{self.__class__.__name__} initialized with model {self.model}")
+        if self.provider == "gemini":
+            import google.generativeai as genai
+            genai.configure(api_key=settings.LLM_API_KEY)
+            self.client = genai.GenerativeModel(
+                model_name=self.model,
+                generation_config={
+                    "temperature": self.temperature,
+                    "max_output_tokens": self.max_tokens,
+                }
+            )
+        elif self.provider == "openai":
+            from openai import OpenAI
+            self.client = OpenAI(api_key=settings.LLM_API_KEY)
+        else:
+            raise ValueError(f"Unsupported LLM provider: {self.provider}")
+        
+        logger.info(f"{self.__class__.__name__} initialized with {self.provider} model {self.model}")
     
     @abstractmethod
     def get_system_prompt(self) -> str:
@@ -92,20 +104,27 @@ class BaseAgent(ABC):
             
             logger.debug(f"{self.__class__.__name__} executing with context: {context}")
             
-            # Call LLM
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                temperature=self.temperature,
-                max_tokens=self.max_tokens,
-                response_format={"type": "json_object"}  # Force JSON output
-            )
+            # Call LLM based on provider
+            if self.provider == "gemini":
+                # Gemini API call
+                full_prompt = f"{system_prompt}\n\n{user_prompt}\n\nRespond with valid JSON only."
+                response = self.client.generate_content(full_prompt)
+                raw_response = response.text
+                
+            elif self.provider == "openai":
+                # OpenAI API call
+                response = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    temperature=self.temperature,
+                    max_tokens=self.max_tokens,
+                    response_format={"type": "json_object"}
+                )
+                raw_response = response.choices[0].message.content
             
-            # Extract response
-            raw_response = response.choices[0].message.content
             logger.debug(f"{self.__class__.__name__} raw response: {raw_response}")
             
             # Parse and validate

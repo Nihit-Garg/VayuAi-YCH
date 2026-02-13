@@ -27,8 +27,8 @@ class Settings(BaseSettings):
     
     # LLM Configuration
     LLM_API_KEY: str = ""
-    LLM_BASE_URL: str = "https://api.openai.com/v1"
-    LLM_MODEL: str = "gpt-4"
+    LLM_PROVIDER: str = "gemini"  # "gemini" or "openai"
+    LLM_MODEL: str = "gemini-1.5-flash"  # or "gpt-4" for OpenAI
     LLM_TEMPERATURE: float = 0.3
     LLM_MAX_TOKENS: int = 500
     
