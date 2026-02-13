@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     LLM_PROVIDER: str = "gemini"  # "gemini" or "openai"
     LLM_MODEL: str = "gemini-1.5-flash"  # or "gpt-4" for OpenAI
     LLM_TEMPERATURE: float = 0.3
-    LLM_MAX_TOKENS: int = 500
+    LLM_MAX_TOKENS: int = 1000
     
     # Blockchain Configuration
     BLOCKCHAIN_ENABLED: bool = False  # Set to True for real blockchain

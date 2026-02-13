@@ -140,6 +140,7 @@ class BaseAgent(ABC):
     def _safe_json_parse(self, response: str) -> Dict:
         """
         Safely parse JSON response with error handling.
+        Handles Gemini's tendency to wrap JSON in markdown code blocks.
         
         Args:
             response: Raw LLM response
@@ -148,7 +149,21 @@ class BaseAgent(ABC):
             Parsed JSON dictionary
         """
         try:
-            return json.loads(response)
+            # Strip markdown code blocks if present (Gemini often does this)
+            cleaned_response = response.strip()
+            
+            # Remove ```json and ``` markers
+            if cleaned_response.startswith("```json"):
+                cleaned_response = cleaned_response[7:]  # Remove ```json
+            elif cleaned_response.startswith("```"):
+                cleaned_response = cleaned_response[3:]  # Remove ```
+            
+            if cleaned_response.endswith("```"):
+                cleaned_response = cleaned_response[:-3]  # Remove trailing ```
+            
+            cleaned_response = cleaned_response.strip()
+            
+            return json.loads(cleaned_response)
         except json.JSONDecodeError as e:
-            logger.error(f"JSON parse error: {str(e)}, response: {response}")
+            logger.error(f"JSON parse error: {str(e)}, response: {response[:200]}")
             raise ValueError(f"Invalid JSON response from LLM: {str(e)}")
