@@ -80,3 +80,33 @@ Provide your prediction in JSON format."""
             estimated_peak_value=data.get("estimated_peak_value"),
             reasoning=data.get("reasoning", "No reasoning provided")
         )
+    
+    def _generate_mock_response(self, context: Dict[str, Any]) -> SmokePrediction:
+        """Generate intelligent mock response based on sensor trends."""
+        readings: List[SensorReading] = context.get("recent_readings", [])
+        current: SensorReading = context.get("current_reading")
+        
+        # Analyze PM2.5 trend
+        if len(readings) >= 3:
+            recent_pm25 = [r.pm25 for r in readings[-3:]]
+            avg_increase = (recent_pm25[-1] - recent_pm25[0]) / len(recent_pm25)
+            
+            # Predict peak if PM2.5 is rising rapidly
+            will_peak = avg_increase > 10 and current.pm25 > 100
+            confidence = min(0.95, 0.6 + (avg_increase / 50))
+            estimated_peak = current.pm25 + (avg_increase * 2) if will_peak else None
+            
+            reasoning = f"PM2.5 trend: {recent_pm25[0]:.1f} → {current.pm25:.1f} ({'rising' if avg_increase > 0 else 'stable/falling'})"
+        else:
+            # Not enough data
+            will_peak = current.pm25 > 150
+            confidence = 0.5
+            estimated_peak = current.pm25 * 1.2 if will_peak else None
+            reasoning = "Limited historical data, prediction based on current level"
+        
+        return SmokePrediction(
+            will_peak=will_peak,
+            confidence=confidence,
+            estimated_peak_value=estimated_peak,
+            reasoning=reasoning
+        )

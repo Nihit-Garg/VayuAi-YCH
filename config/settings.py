@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     BLOCKCHAIN_PRIVATE_KEY: str = ""
     BLOCKCHAIN_CONTRACT_ADDRESS: str = ""
     
+    # AI Configuration
+    USE_MOCK_AI: bool = True  # Set to False to use real LLM (for testing/demo)
+    
     # Sensor Thresholds (for fault detection)
     PM25_MAX: float = 500.0
     PM25_MIN: float = 0.0

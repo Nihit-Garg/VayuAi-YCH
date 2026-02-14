@@ -8,15 +8,10 @@ from typing import Dict
 import logging
 
 from models.schemas import SensorReading, ControlResponse
-from services.sensor_service.ingestion import SensorIngestionService
-from core.decision_engine.orchestrator import DecisionOrchestrator
+from services.shared import sensor_service, decision_orchestrator
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
-
-# Initialize services (in production, use dependency injection)
-sensor_service = SensorIngestionService()
-decision_orchestrator = DecisionOrchestrator()
 
 
 @router.post("/ingest", response_model=ControlResponse)

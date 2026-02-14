@@ -8,18 +8,14 @@ from typing import Dict, List
 import logging
 
 from models.schemas import DashboardData, BlockchainLog
-from services.sensor_service.ingestion import SensorIngestionService
-from blockchain.logger import BlockchainLogger
+from services.shared import sensor_service, blockchain_logger
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-sensor_service = SensorIngestionService()
-blockchain_logger = BlockchainLogger()
 
-
-@router.get("/data/{device_id}", response_model=DashboardData)
-async def get_dashboard_data(device_id: str) -> DashboardData:
+@router.get("/data/{device_id}")
+async def get_dashboard_data(device_id: str):
     """
     Get comprehensive dashboard data for a device.
     
@@ -33,16 +29,54 @@ async def get_dashboard_data(device_id: str) -> DashboardData:
         - System health
     """
     try:
-        # TODO: Implement aggregation logic
-        # This should gather data from:
-        # - Sensor service (current reading)
-        # - Decision orchestrator (latest prediction & classification)
-        # - Control service (current control state)
-        # - Fault detector (recent faults)
-        # - Blockchain logger (recent logs)
+        # Get current sensor reading
+        current_reading = sensor_service.get_latest_reading(device_id)
+        if not current_reading:
+            raise HTTPException(status_code=404, detail=f"No data found for device {device_id}")
         
-        raise HTTPException(status_code=501, detail="Dashboard aggregation not yet implemented")
+        # Get cached AI decisions
+        from services.shared import get_latest_decisions
+        cached_decisions = get_latest_decisions(device_id)
         
+        if not cached_decisions:
+            raise HTTPException(status_code=404, detail=f"No AI decisions found for device {device_id}. Send sensor data first.")
+        
+        # Get recent blockchain logs for this device
+        blockchain_logs = blockchain_logger.get_logs_by_device(device_id, limit=10)
+        
+        # Get recent faults
+        recent_faults = []
+        if cached_decisions.get("fault"):
+            recent_faults = [cached_decisions["fault"]]
+        
+        # Build control response
+        decision = cached_decisions["decision"]
+        control_response = {
+            "fan_on": decision.fan_on,
+            "fan_intensity": decision.fan_intensity,
+            "timestamp": current_reading.timestamp
+        }
+        
+        # Build dashboard data
+        dashboard_data = {
+            "device_id": device_id,
+            "current_reading": current_reading.dict(),
+            "prediction": cached_decisions["prediction"].dict(),
+            "classification": cached_decisions["classification"].dict(),
+            "control_status": control_response,
+            "recent_faults": [f.dict() for f in recent_faults],
+            "recent_logs": [log.dict() for log in blockchain_logs],
+            "system_health": {
+                "status": "healthy",
+                "ai_mode": "mock",
+                "blockchain": "connected" if blockchain_logger.enabled else "simulated"
+            }
+        }
+        
+        return dashboard_data
+        
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error getting dashboard data: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))

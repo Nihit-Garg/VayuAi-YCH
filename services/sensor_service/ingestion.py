@@ -121,6 +121,21 @@ class SensorIngestionService:
         
         return [reading.dict() for reading in recent_readings]
     
+    def get_latest_reading(self, device_id: str) -> Optional[SensorReading]:
+        """
+        Get the most recent sensor reading for a device.
+        
+        Args:
+            device_id: ESP32 device identifier
+        
+        Returns:
+            Latest sensor reading or None if no readings exist
+        """
+        if device_id not in self.device_readings or len(self.device_readings[device_id]) == 0:
+            return None
+        
+        return list(self.device_readings[device_id])[-1]
+    
     def list_devices(self) -> List[str]:
         """
         List all registered device IDs.

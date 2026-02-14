@@ -98,3 +98,76 @@ Should the fan be ON or OFF? At what intensity? Provide your decision in JSON fo
             reasoning=data.get("reasoning", "No reasoning provided"),
             override_reason=data.get("override_reason")
         )
+    
+    def _generate_mock_response(self, context: Dict[str, Any]) -> ControlDecision:
+        """Generate intelligent mock control decision based on sensor data."""
+        current: SensorReading = context.get("current_reading")
+        prediction: SmokePrediction = context.get("prediction")
+        classification: AirTypeClassification = context.get("classification")
+        
+        pm25, co2, co, voc = current.pm25, current.co2, current.co, current.voc
+        
+        # Decision logic
+        fan_on = False
+        fan_intensity = 0
+        reasoning_parts = []
+        
+        # Check thresholds
+        if pm25 > 35:
+            fan_on = True
+            reasoning_parts.append(f"PM2.5 elevated ({pm25:.1f})")
+        
+        if co > 50:
+            fan_on = True
+            reasoning_parts.append(f"CO high ({co:.1f})")
+        
+        if voc > 200:
+            fan_on = True
+            reasoning_parts.append(f"VOC elevated ({voc:.1f})")
+        
+        # Determine intensity based on severity and air type
+        if fan_on:
+            # Base intensity on worst pollutant
+            max_pm25_ratio = pm25 / 150  # 150 is very high
+            max_co_ratio = co / 100
+            max_voc_ratio = voc / 500
+            severity = max(max_pm25_ratio, max_co_ratio, max_voc_ratio)
+            
+            # Adjust for air type
+            air_type = classification.air_type.value
+            if air_type == "chemical":
+                fan_intensity = 100
+                reasoning_parts.append("Chemical fumes detected - max ventilation")
+            elif air_type == "cigarette" or air_type == "vehicle":
+                fan_intensity = 75 if severity < 0.8 else 100
+                reasoning_parts.append(f"{air_type.capitalize()} smoke - high ventilation")
+            elif air_type == "cooking":
+                fan_intensity = 50 if severity < 0.6 else 75
+                reasoning_parts.append("Cooking smoke - moderate ventilation")
+            else:
+                # General intensity based on severity
+                if severity > 0.8:
+                    fan_intensity = 100
+                elif severity > 0.6:
+                    fan_intensity = 75
+                elif severity > 0.4:
+                    fan_intensity = 50
+                else:
+                    fan_intensity = 25
+            
+            # Boost if peak predicted
+            if prediction.will_peak and prediction.confidence > 0.6:
+                if fan_intensity < 100:
+                    fan_intensity = min(100, fan_intensity + 25)
+                    reasoning_parts.append("Boosted for predicted peak")
+        else:
+            reasoning_parts.append("Air quality good - fan off")
+        
+        reasoning = "; ".join(reasoning_parts)
+        
+        return ControlDecision(
+            fan_on=fan_on,
+            fan_intensity=fan_intensity,
+            reasoning=reasoning,
+            override_reason=None
+        )

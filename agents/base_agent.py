@@ -98,6 +98,11 @@ class BaseAgent(ABC):
             Agent-specific output (SmokePrediction, AirTypeClassification, etc.)
         """
         try:
+            # Check if using mock AI
+            if settings.USE_MOCK_AI:
+                logger.info(f"{self.__class__.__name__} using MOCK response (USE_MOCK_AI=True)")
+                return self._generate_mock_response(context)
+            
             # Format prompts
             system_prompt = self.get_system_prompt()
             user_prompt = self.format_user_prompt(context)
@@ -136,6 +141,20 @@ class BaseAgent(ABC):
         except Exception as e:
             logger.error(f"{self.__class__.__name__} error: {str(e)}")
             raise
+    
+    @abstractmethod
+    def _generate_mock_response(self, context: Dict[str, Any]) -> Any:
+        """
+        Generate mock response for testing (when USE_MOCK_AI=True).
+        Each agent must implement this with intelligent mock logic.
+        
+        Args:
+            context: Sensor data and other contextual information
+        
+        Returns:
+            Agent-specific mock response
+        """
+        pass
     
     def _safe_json_parse(self, response: str) -> Dict:
         """

@@ -77,3 +77,57 @@ What type of air pollution is this? Provide your classification in JSON format."
             confidence=data.get("confidence", 0.0),
             reasoning=data.get("reasoning", "No reasoning provided")
         )
+    
+    def _generate_mock_response(self, context: Dict[str, Any]) -> AirTypeClassification:
+        """Generate intelligent mock response based on sensor patterns."""
+        current: SensorReading = context.get("current_reading")
+        
+        # Classification logic based on sensor patterns
+        pm25, co2, co, voc = current.pm25, current.co2, current.co, current.voc
+        
+        # Clean air
+        if pm25 < 35 and co < 10 and voc < 100:
+            return AirTypeClassification(
+                air_type=SmokeEventType.CLEAN,
+                confidence=0.9,
+                reasoning=f"All values low: PM2.5={pm25:.1f}, CO={co:.1f}, VOC={voc:.1f}"
+            )
+        
+        # Cigarette smoke: High PM2.5, moderate CO, high VOC
+        if pm25 > 100 and 20 < co < 60 and voc > 200:
+            return AirTypeClassification(
+                air_type=SmokeEventType.CIGARETTE,
+                confidence=0.85,
+                reasoning=f"Pattern matches cigarette: High PM2.5={pm25:.1f}, moderate CO={co:.1f}, high VOC={voc:.1f}"
+            )
+        
+        # Vehicle exhaust: High PM2.5, high CO, elevated CO2
+        if pm25 > 80 and co > 50 and co2 > 600:
+            return AirTypeClassification(
+                air_type=SmokeEventType.VEHICLE,
+                confidence=0.8,
+                reasoning=f"Pattern matches vehicle: PM2.5={pm25:.1f}, high CO={co:.1f}, elevated CO2={co2:.1f}"
+            )
+        
+        # Cooking smoke: Very high PM2.5, high VOC
+        if pm25 > 150 and voc > 250:
+            return AirTypeClassification(
+                air_type=SmokeEventType.COOKING,
+                confidence=0.75,
+                reasoning=f"Pattern matches cooking: Very high PM2.5={pm25:.1f}, high VOC={voc:.1f}"
+            )
+        
+        # Chemical fumes: Low PM2.5, very high VOC
+        if pm25 < 50 and voc > 400:
+            return AirTypeClassification(
+                air_type=SmokeEventType.CHEMICAL,
+                confidence=0.7,
+                reasoning=f"Pattern matches chemical: Low PM2.5={pm25:.1f}, very high VOC={voc:.1f}"
+            )
+        
+        # Unknown/mixed
+        return AirTypeClassification(
+            air_type=SmokeEventType.UNKNOWN,
+            confidence=0.5,
+            reasoning=f"Mixed or unclear pattern: PM2.5={pm25:.1f}, CO={co:.1f}, VOC={voc:.1f}"
+        )

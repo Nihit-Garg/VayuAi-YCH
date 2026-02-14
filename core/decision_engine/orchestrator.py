@@ -39,14 +39,23 @@ class DecisionOrchestrator:
     This is the central brain of the system.
     """
     
-    def __init__(self):
+    def __init__(self, blockchain_logger=None):
         """Initialize all components."""
         self.smoke_predictor = SmokePredictionAgent()
         self.air_classifier = AirTypeClassificationAgent()
         self.control_agent = ControlDecisionAgent()
         self.fault_detector = FaultDetector()
         self.self_healer = SelfHealingModule()
-        self.blockchain_logger = BlockchainLogger()
+        
+        # Use provided blockchain_logger or create new one
+        if blockchain_logger is not None:
+            self.blockchain_logger = blockchain_logger
+        else:
+            from blockchain.logger import BlockchainLogger
+            self.blockchain_logger = BlockchainLogger()
+        
+        # Cache for latest AI decisions per device
+        self.latest_decisions = {}  # {device_id: {prediction, classification, decision}}
         
         logger.info("DecisionOrchestrator initialized with all agents")
     
@@ -108,6 +117,14 @@ class DecisionOrchestrator:
         }
         decision: ControlDecision = await self.control_agent.execute(control_context)
         logger.info(f"Control decision: fan_on={decision.fan_on}, intensity={decision.fan_intensity}")
+        
+        # Cache the latest decisions for dashboard
+        self.latest_decisions[device_id] = {
+            "prediction": prediction,
+            "classification": classification,
+            "decision": decision,
+            "fault": fault if fault.has_fault else None
+        }
         
         return decision
     
