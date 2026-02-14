@@ -54,7 +54,7 @@ class DecisionOrchestrator:
         self,
         current_reading: SensorReading,
         recent_readings: List[SensorReading]
-    ) -> ControlDecision:
+    ) -> tuple[ControlDecision, SmokePrediction]:
         """
         Process sensor data through the entire pipeline.
         
@@ -63,7 +63,7 @@ class DecisionOrchestrator:
             recent_readings: Recent historical readings for context
         
         Returns:
-            ControlDecision to send to ESP32
+            Tuple of (ControlDecision, SmokePrediction)
         """
         device_id = current_reading.device_id
         logger.info(f"Processing decision pipeline for {device_id}")
@@ -71,6 +71,7 @@ class DecisionOrchestrator:
         # STEP 1: Fault Detection
         fault = self.fault_detector.detect_faults(current_reading, recent_readings)
         
+        prediction = None
         if fault.has_fault:
             logger.warning(f"Fault detected: {fault.details}")
             
@@ -83,7 +84,7 @@ class DecisionOrchestrator:
             
             # If safe mode is active, return safe mode control
             if self.self_healer.should_use_safe_mode():
-                return self.self_healer.get_safe_mode_control()
+                return self.self_healer.get_safe_mode_control(), None
         
         # STEP 3: Smoke Prediction
         prediction_context = {
@@ -109,12 +110,14 @@ class DecisionOrchestrator:
         decision: ControlDecision = await self.control_agent.execute(control_context)
         logger.info(f"Control decision: fan_on={decision.fan_on}, intensity={decision.fan_intensity}")
         
-        return decision
+        return decision, prediction
+
     
     async def log_to_blockchain(
         self,
         device_id: str,
-        decision: ControlDecision
+        decision: ControlDecision,
+        prediction: SmokePrediction = None
     ) -> None:
         """
         Log critical control decision to blockchain.
@@ -122,12 +125,14 @@ class DecisionOrchestrator:
         Args:
             device_id: ESP32 device identifier
             decision: Control decision to log
+            prediction: Optional prediction that led to decision
         """
         try:
-            await self.blockchain_logger.log_decision(device_id, decision)
+            await self.blockchain_logger.log_decision(device_id, decision, prediction)
             logger.info(f"Logged decision to blockchain for {device_id}")
         except Exception as e:
             logger.error(f"Failed to log to blockchain: {str(e)}")
+
     
     async def _log_fault_to_blockchain(
         self,

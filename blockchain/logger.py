@@ -12,6 +12,7 @@ import asyncio
 from models.schemas import (
     BlockchainLog,
     ControlDecision,
+    SmokePrediction,
     FaultDetectionResult,
     SelfHealingAction
 )
@@ -105,7 +106,8 @@ class BlockchainLogger:
     async def log_decision(
         self,
         device_id: str,
-        decision: ControlDecision
+        decision: ControlDecision,
+        prediction: Optional[SmokePrediction] = None
     ) -> BlockchainLog:
         """
         Log control decision to blockchain.
@@ -113,21 +115,29 @@ class BlockchainLogger:
         Args:
             device_id: ESP32 device identifier
             decision: Control decision to log
+            prediction: Optional prediction that led to decision
         
         Returns:
             BlockchainLog entry
         """
+        log_data = {
+            "fan_on": decision.fan_on,
+            "fan_intensity": decision.fan_intensity,
+            "reasoning": decision.reasoning,
+            "override_reason": decision.override_reason
+        }
+        
+        if prediction:
+            log_data["predicted_smoke_peak"] = prediction.estimated_peak_value
+            log_data["prediction_confidence"] = prediction.confidence
+
         log_entry = BlockchainLog(
             event_type="decision",
             timestamp=datetime.utcnow(),
             device_id=device_id,
-            data={
-                "fan_on": decision.fan_on,
-                "fan_intensity": decision.fan_intensity,
-                "reasoning": decision.reasoning,
-                "override_reason": decision.override_reason
-            }
+            data=log_data
         )
+
         
         if self.enabled and self.contract and self.account:
             try:

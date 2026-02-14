@@ -1,82 +1,67 @@
 """
-Smoke Prediction Agent
-Predicts if smoke levels will peak in the near future based on recent trends
+Smoke Prediction Agent (Multivariate ML Model)
+Predicts smoke density using trained XGBoost model.
 """
 
 from typing import Dict, Any, List
-import json
 import logging
 
 from agents.base_agent import BaseAgent
 from models.schemas import SmokePrediction, SensorReading
+from services.smoke_model_service import SmokeModelService
 
 logger = logging.getLogger(__name__)
 
 
 class SmokePredictionAgent(BaseAgent):
     """
-    AI agent that analyzes recent sensor trends to predict smoke events.
-    
-    Uses LLM to:
-    - Analyze PM2.5, CO, VOC trends
-    - Detect rising patterns
-    - Predict if levels will peak soon
-    - Estimate peak value
+    Agent that uses a trained XGBoost model for multivariate smoke prediction.
+    Replaces the LLM approach for speed and accuracy in smoke event detection.
     """
     
-    def get_system_prompt(self) -> str:
-        """Define system prompt for smoke prediction."""
-        return """You are an expert air quality analyst specializing in smoke event prediction.
+    def __init__(self):
+        # We don't call super().__init__() because we don't need LLM initialization
+        self.model_service = SmokeModelService()
+        logger.info("SmokePredictionAgent initialized with SmokeModelService")
 
-Your task is to analyze recent sensor readings and predict if smoke levels will peak in the next few readings.
-
-Consider:
-- PM2.5 trends (primary smoke indicator)
-- CO and VOC levels (supporting indicators)
-- Rate of change in values
-- Historical patterns
-
-Output MUST be valid JSON with this exact structure:
-{
-    "will_peak": true/false,
-    "confidence": 0.0-1.0,
-    "estimated_peak_value": number or null,
-    "reasoning": "brief explanation of your prediction"
-}
-
-Be conservative with predictions. Only predict a peak if you see clear rising trends."""
-    
-    def format_user_prompt(self, context: Dict[str, Any]) -> str:
-        """Format user prompt with sensor data."""
+    async def execute(self, context: Dict[str, Any]) -> SmokePrediction:
+        """
+        Execute prediction logic using trained multivariate model.
+        """
         readings: List[SensorReading] = context.get("recent_readings", [])
-        current: SensorReading = context.get("current_reading")
+        current_reading: SensorReading = context.get("current_reading")
         
-        # Format readings for LLM
-        readings_text = []
-        for i, reading in enumerate(readings):
-            readings_text.append(
-                f"Reading {i+1}: PM2.5={reading.pm25}, CO2={reading.co2}, "
-                f"CO={reading.co}, VOC={reading.voc}"
-            )
+        if not readings and current_reading:
+            readings = [current_reading]
+            
+        # The service handles checking attributes like .co, .pm25 etc on the objects
+        predicted_value = self.model_service.predict(readings)
         
-        prompt = f"""Analyze these recent sensor readings and predict if smoke levels will peak soon:
+        # Analyze trend for heuristic binary flag
+        last_val = getattr(readings[-1], 'co', 0) if readings else 0
+            
+        # Heuristic for "Will Peak" based on predicted value vs current
+        will_peak = predicted_value > (last_val * 1.05) and predicted_value > 250
+        
+        # Confidence calculation
+        confidence = 0.95 if predicted_value > 400 else (0.85 if will_peak else 0.60)
+        
+        reasoning = f"Predicted MQ2 level: {predicted_value:.2f}. "
+        if will_peak:
+            reasoning += "Rising trend predicted based on multivariate analysis."
+        else:
+            reasoning += "Stable or decreasing trend."
 
-{chr(10).join(readings_text)}
-
-Current reading: PM2.5={current.pm25}, CO2={current.co2}, CO={current.co}, VOC={current.voc}
-
-Based on these trends, will smoke levels peak in the next few readings?
-Provide your prediction in JSON format."""
-        
-        return prompt
-    
-    def parse_response(self, response: str) -> SmokePrediction:
-        """Parse LLM response into SmokePrediction model."""
-        data = self._safe_json_parse(response)
-        
         return SmokePrediction(
-            will_peak=data.get("will_peak", False),
-            confidence=data.get("confidence", 0.0),
-            estimated_peak_value=data.get("estimated_peak_value"),
-            reasoning=data.get("reasoning", "No reasoning provided")
+            will_peak=will_peak,
+            confidence=confidence,
+            estimated_peak_value=predicted_value,
+            reasoning=reasoning
         )
+
+    # placeholder implementations to satisfy BaseAgent contract
+    def get_system_prompt(self) -> str: return ""
+    def format_user_prompt(self, context: Dict[str, Any]) -> str: return ""
+    def parse_response(self, response: str) -> Any: return None
+
+

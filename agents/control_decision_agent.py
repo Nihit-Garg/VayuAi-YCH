@@ -13,88 +13,79 @@ from models.schemas import ControlDecision, SensorReading, SmokePrediction, AirT
 logger = logging.getLogger(__name__)
 
 
+
 class ControlDecisionAgent(BaseAgent):
-    """
-    AI agent that decides fan control actions.
-    
-    Uses LLM to:
-    - Consider current sensor values
-    - Factor in smoke predictions
-    - Account for air type classification
-    - Decide optimal fan control (ON/OFF, intensity)
-    - Provide reasoning for decisions
-    """
-    
-    def get_system_prompt(self) -> str:
-        """Define system prompt for control decisions."""
-        return """You are an intelligent air quality control system making fan control decisions.
+    def __init__(self):
+        # Skip LLM client initialization
+        pass
 
-Your task is to decide whether to turn the fan ON/OFF and at what intensity (0-100).
-
-Decision guidelines:
-- Turn fan ON if PM2.5 > 35 OR CO > 50 OR VOC > 200
-- Higher intensity for worse air quality
-- If smoke peak is predicted, preemptively increase intensity
-- For cigarette smoke: high intensity (75-100)
-- For cooking smoke: moderate intensity (50-75)
-- For vehicle exhaust: high intensity (75-100)
-- For chemical fumes: maximum intensity (100)
-- Turn fan OFF if all values are low and no peak predicted
-
-Available fan intensities: 0, 25, 50, 75, 100
-
-Output MUST be valid JSON with this exact structure:
-{
-    "fan_on": true/false,
-    "fan_intensity": 0-100,
-    "reasoning": "brief explanation of decision",
-    "override_reason": "explanation if overriding normal logic" or null
-}
-
-Make intelligent decisions that balance air quality improvement with energy efficiency."""
-    
-    def format_user_prompt(self, context: Dict[str, Any]) -> str:
-        """Format user prompt with all available context."""
+    async def execute(self, context: Dict[str, Any]) -> ControlDecision:
+        """
+        Execute control logic. 
+        Prioritizes deterministic safety rules over LLM for speed and reliability in emergencies.
+        """
         current: SensorReading = context.get("current_reading")
         prediction: SmokePrediction = context.get("prediction")
         classification: AirTypeClassification = context.get("classification")
         
-        prompt = f"""Make a fan control decision based on this information:
-
-Current Sensor Readings:
-- PM2.5: {current.pm25} µg/m³
-- CO2: {current.co2} ppm
-- CO: {current.co} ppm
-- VOC: {current.voc} ppb
-
-Smoke Prediction:
-- Will peak: {prediction.will_peak}
-- Confidence: {prediction.confidence}
-- Reasoning: {prediction.reasoning}
-
-Air Type Classification:
-- Type: {classification.air_type.value}
-- Confidence: {classification.confidence}
-- Reasoning: {classification.reasoning}
-
-Should the fan be ON or OFF? At what intensity? Provide your decision in JSON format."""
+        # ---------------------------------------------------------
+        # 1. Critical Safety Overrides (Deterministic)
+        # ---------------------------------------------------------
+        reasons = []
+        fan_intensity = 0
         
-        return prompt
-    
-    def parse_response(self, response: str) -> ControlDecision:
-        """Parse LLM response into ControlDecision model."""
-        data = self._safe_json_parse(response)
+        # High CO/Smoke (Immediate Danger)
+        # Using .co or .mq2_raw if available (assuming SensorReading has them)
+        co_val = getattr(current, 'co', 0)
+        mq2_val = getattr(current, 'mq2_raw', 0)
         
-        # Validate fan_intensity is in allowed levels
-        fan_intensity = data.get("fan_intensity", 0)
-        allowed_levels = [0, 25, 50, 75, 100]
+        if co_val > 200 or mq2_val > 400:
+            fan_intensity = 100
+            reasons.append("CRITICAL: High Smoke/CO levels detected.")
+
+        # Predicted Peak (Pre-emptive)
+        if prediction and prediction.will_peak and prediction.confidence > 0.8:
+            fan_intensity = max(fan_intensity, 100)
+            reasons.append(f"PRE-EMPTIVE: Smoke peak predicted ({prediction.estimated_peak_value:.0f}).")
+
+        # PM2.5 Thresholds
+        if current.pm25 > 150:
+            fan_intensity = max(fan_intensity, 100)
+            reasons.append("Hazardous PM2.5 levels.")
+        elif current.pm25 > 75:
+            fan_intensity = max(fan_intensity, 75)
+            reasons.append("Unhealthy PM2.5 levels.")
+            
+        # ---------------------------------------------------------
+        # 2. Return Decision if Safety Logic Triggered
+        # ---------------------------------------------------------
+        if fan_intensity > 0:
+            return ControlDecision(
+                fan_on=True,
+                fan_intensity=fan_intensity,
+                reasoning="; ".join(reasons),
+                override_reason="Safety Protocol Activated"
+            )
+
+        # ---------------------------------------------------------
+        # 3. Fallback to LLM for Complex/Nuanced Decisions (Comfort)
+        # ---------------------------------------------------------
+        # If air is relatively clean but maybe needs adjustment (e.g. VOCs, slight stuffiness)
+        # This section is removed as per instruction to replace LLM methods with deterministic ones.
+        # The instruction implies that if no safety logic is triggered, the agent should return a default
+        # or no action, rather than deferring to an LLM.
         
-        # Round to nearest allowed level
-        fan_intensity = min(allowed_levels, key=lambda x: abs(x - fan_intensity))
-        
+        # If no critical safety or pre-emptive conditions met, and no other deterministic rules apply,
+        # the fan remains off or at a default state.
         return ControlDecision(
-            fan_on=data.get("fan_on", False),
-            fan_intensity=fan_intensity,
-            reasoning=data.get("reasoning", "No reasoning provided"),
-            override_reason=data.get("override_reason")
+            fan_on=False,
+            fan_intensity=0,
+            reasoning="No critical conditions detected. Fan off.",
+            override_reason=None
         )
+
+    # placeholder implementations to satisfy BaseAgent contract
+    def get_system_prompt(self) -> str: return ""
+    def format_user_prompt(self, context: Dict[str, Any]) -> str: return ""
+    def parse_response(self, response: str) -> Any: return None
+

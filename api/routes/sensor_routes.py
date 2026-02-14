@@ -52,15 +52,17 @@ async def ingest_sensor_data(
         context = sensor_service.get_recent_context(reading.device_id)
         
         # Step 3: Run decision orchestration (AI agents + fault detection + control)
-        control_decision = await decision_orchestrator.process(reading, context)
+        control_decision, prediction = await decision_orchestrator.process(reading, context)
         
         # Step 4: Log critical decisions to blockchain (background task)
         if control_decision.fan_on or control_decision.override_reason:
             background_tasks.add_task(
                 decision_orchestrator.log_to_blockchain,
                 reading.device_id,
-                control_decision
+                control_decision,
+                prediction
             )
+
         
         # Step 5: Return control response
         response = ControlResponse(
