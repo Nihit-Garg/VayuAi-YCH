@@ -6,7 +6,7 @@ from sklearn.metrics import mean_absolute_error, r2_score
 import joblib
 import os
 
-WINDOW = 10  # Reduced window size for faster reaction with smaller dataset
+WINDOW = 50  # Increased window size for better context awareness
 MODEL_PATH = "smoke_model.pkl"
 DATA_PATH = "data/mq2_sample_data.csv"
 

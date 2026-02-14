@@ -10,7 +10,7 @@ class SmokeModelService:
     """
 
     def __init__(self, model_path: str = "smoke_model.pkl"):
-        self.window_size = 10  # Must match training WINDOW
+        self.window_size = 50  # Must match training WINDOW
         self.model_path = model_path
         self.model = self._load_model()
 
