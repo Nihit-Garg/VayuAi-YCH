@@ -121,6 +121,31 @@ class SensorIngestionService:
         
         return [reading.dict() for reading in recent_readings]
     
+    def get_history_by_time_range(self, device_id: str, hours: float) -> List[Dict]:
+        """
+        Get historical sensor readings within a time range.
+        
+        Args:
+            device_id: ESP32 device identifier
+            hours: Number of hours to look back from now
+        
+        Returns:
+            List of sensor readings as dictionaries, filtered by time range
+        """
+        if device_id not in self.device_readings:
+            return []
+        
+        cutoff_time = datetime.utcnow() - timedelta(hours=hours)
+        readings = list(self.device_readings[device_id])
+        
+        # Filter readings within the time range
+        filtered_readings = [
+            reading for reading in readings 
+            if reading.timestamp >= cutoff_time
+        ]
+        
+        return [reading.dict() for reading in filtered_readings]
+    
     def get_latest_reading(self, device_id: str) -> Optional[SensorReading]:
         """
         Get the most recent sensor reading for a device.

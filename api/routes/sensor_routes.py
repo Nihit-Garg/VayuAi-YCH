@@ -90,20 +90,40 @@ async def get_sensor_status(device_id: str) -> Dict:
 
 
 @router.get("/history/{device_id}")
-async def get_sensor_history(device_id: str, limit: int = 50) -> Dict:
+async def get_sensor_history(
+    device_id: str, 
+    limit: int = 50,
+    hours: float = None
+) -> Dict:
     """
     Get historical sensor readings for a device.
     
     Args:
         device_id: ESP32 device identifier
-        limit: Number of recent readings to return (default 50)
+        limit: Number of recent readings to return (default 50, used if hours not specified)
+        hours: Optional time window in hours (e.g., 1, 6, 24, 168 for 7 days)
     
     Returns:
-        List of recent sensor readings
+        List of recent sensor readings with metadata
     """
     try:
-        history = sensor_service.get_history(device_id, limit)
-        return {"device_id": device_id, "readings": history}
+        # Use time-based filtering if hours parameter is provided
+        if hours is not None:
+            history = sensor_service.get_history_by_time_range(device_id, hours)
+            return {
+                "device_id": device_id,
+                "readings": history,
+                "time_range_hours": hours,
+                "total_readings": len(history)
+            }
+        else:
+            # Fall back to limit-based filtering for backward compatibility
+            history = sensor_service.get_history(device_id, limit)
+            return {
+                "device_id": device_id,
+                "readings": history,
+                "total_readings": len(history)
+            }
     except Exception as e:
         logger.error(f"Error getting sensor history: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
